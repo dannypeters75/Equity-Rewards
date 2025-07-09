@@ -178,37 +178,6 @@
   }
 )
 
-;; PRIVATE VALIDATION FUNCTIONS
-
-(define-private (validate-percentage-bounds (percentage-value uint))
-  (if (<= percentage-value max-percentage-basis-points)
-    (ok true)
-    (err ERR-INVALID-PERCENTAGE-VALUE)
-  )
-)
-
-(define-private (validate-minimum-stake-threshold (threshold-amount uint))
-  (if (> threshold-amount u0)
-    (ok true)
-    (err ERR-INVALID-MINIMUM-STAKE-AMOUNT)
-  )
-)
-
-(define-private (validate-stakeholder-address (user-address principal))
-  (if (and (not (is-eq user-address contract-owner))
-           (not (is-eq user-address contract-address)))
-    (ok true)
-    (err ERR-INVALID-PRINCIPAL-ADDRESS)
-  )
-)
-
-(define-private (validate-non-zero-amount (amount uint))
-  (if (> amount u0)
-    (ok true)
-    (err ERR-ZERO-AMOUNT-PROVIDED)
-  )
-)
-
 ;; PRIVATE ACCESS CONTROL FUNCTIONS
 
 (define-private (require-contract-owner)
@@ -259,7 +228,7 @@
   (begin
     (try! (require-contract-owner))
     (try! (require-contract-not-initialized))
-    (try! (validate-minimum-stake-threshold minimum-stake-amount))
+    (asserts! (> minimum-stake-amount u0) (err ERR-INVALID-MINIMUM-STAKE-AMOUNT))
     
     (var-set minimum-stake-threshold minimum-stake-amount)
     (var-set is-contract-initialized true)
@@ -274,8 +243,11 @@
     (try! (require-contract-owner))
     (try! (require-contract-initialized))
     (try! (require-distribution-round-inactive))
-    (try! (validate-stakeholder-address stakeholder-address))
-    (try! (validate-percentage-bounds ownership-percentage))
+    (asserts! (and (not (is-eq stakeholder-address contract-owner))
+                   (not (is-eq stakeholder-address contract-address))) 
+              (err ERR-INVALID-PRINCIPAL-ADDRESS))
+    (asserts! (<= ownership-percentage max-percentage-basis-points) 
+              (err ERR-INVALID-PERCENTAGE-VALUE))
     
     (let (
       (current-total-percentage (var-get total-allocated-percentage))
@@ -299,17 +271,20 @@
 )
 
 (define-public (update-stakeholder-ownership (stakeholder-address principal) (new-ownership-percentage uint))
-  (let (
-    (current-equity-data (get-stakeholder-equity-info stakeholder-address))
-    (current-percentage (get ownership-percentage-basis-points current-equity-data))
-  )
-    (begin
-      (try! (require-contract-owner))
-      (try! (require-contract-initialized))
-      (try! (require-distribution-round-inactive))
-      (try! (validate-stakeholder-address stakeholder-address))
-      (try! (validate-percentage-bounds new-ownership-percentage))
-      
+  (begin
+    (try! (require-contract-owner))
+    (try! (require-contract-initialized))
+    (try! (require-distribution-round-inactive))
+    (asserts! (and (not (is-eq stakeholder-address contract-owner))
+                   (not (is-eq stakeholder-address contract-address))) 
+              (err ERR-INVALID-PRINCIPAL-ADDRESS))
+    (asserts! (<= new-ownership-percentage max-percentage-basis-points) 
+              (err ERR-INVALID-PERCENTAGE-VALUE))
+    
+    (let (
+      (current-equity-data (get-stakeholder-equity-info stakeholder-address))
+      (current-percentage (get ownership-percentage-basis-points current-equity-data))
+    )
       (asserts! (> current-percentage u0) (err ERR-STAKEHOLDER-NOT-REGISTERED))
       
       (let (
@@ -330,16 +305,18 @@
 )
 
 (define-public (remove-stakeholder (stakeholder-address principal))
-  (let (
-    (current-equity-data (get-stakeholder-equity-info stakeholder-address))
-    (current-percentage (get ownership-percentage-basis-points current-equity-data))
-  )
-    (begin
-      (try! (require-contract-owner))
-      (try! (require-contract-initialized))
-      (try! (require-distribution-round-inactive))
-      (try! (validate-stakeholder-address stakeholder-address))
-      
+  (begin
+    (try! (require-contract-owner))
+    (try! (require-contract-initialized))
+    (try! (require-distribution-round-inactive))
+    (asserts! (and (not (is-eq stakeholder-address contract-owner))
+                   (not (is-eq stakeholder-address contract-address))) 
+              (err ERR-INVALID-PRINCIPAL-ADDRESS))
+    
+    (let (
+      (current-equity-data (get-stakeholder-equity-info stakeholder-address))
+      (current-percentage (get ownership-percentage-basis-points current-equity-data))
+    )
       (asserts! (> current-percentage u0) (err ERR-STAKEHOLDER-NOT-REGISTERED))
       
       (map-delete stakeholder-equity-records stakeholder-address)
@@ -356,7 +333,9 @@
   (begin
     (try! (require-contract-owner))
     (try! (require-contract-initialized))
-    (try! (validate-stakeholder-address stakeholder-address))
+    (asserts! (and (not (is-eq stakeholder-address contract-owner))
+                   (not (is-eq stakeholder-address contract-address))) 
+              (err ERR-INVALID-PRINCIPAL-ADDRESS))
     
     (map-set stakeholder-access-control stakeholder-address true)
     (ok true)
@@ -367,7 +346,9 @@
   (begin
     (try! (require-contract-owner))
     (try! (require-contract-initialized))
-    (try! (validate-stakeholder-address stakeholder-address))
+    (asserts! (and (not (is-eq stakeholder-address contract-owner))
+                   (not (is-eq stakeholder-address contract-address))) 
+              (err ERR-INVALID-PRINCIPAL-ADDRESS))
     
     (map-set stakeholder-access-control stakeholder-address false)
     (ok true)
@@ -407,7 +388,7 @@
     (begin
       (try! (require-contract-initialized))
       (try! (require-distribution-round-active))
-      (try! (validate-non-zero-amount contributor-balance))
+      (asserts! (> contributor-balance u0) (err ERR-ZERO-AMOUNT-PROVIDED))
       
       (match (stx-transfer? contributor-balance tx-sender contract-address)
         success (begin
@@ -425,7 +406,7 @@
   (begin
     (try! (require-contract-initialized))
     (try! (require-distribution-round-active))
-    (try! (validate-non-zero-amount contribution-amount))
+    (asserts! (> contribution-amount u0) (err ERR-ZERO-AMOUNT-PROVIDED))
     
     (match (stx-transfer? contribution-amount tx-sender contract-address)
       success (begin
@@ -449,7 +430,7 @@
       (try! (require-contract-owner))
       (try! (require-contract-initialized))
       (try! (require-distribution-round-active))
-      (try! (validate-non-zero-amount contract-balance))
+      (asserts! (> contract-balance u0) (err ERR-ZERO-AMOUNT-PROVIDED))
       
       (map-set distribution-round-history next-round-id { 
         total-amount-distributed: contract-balance, 
@@ -513,7 +494,7 @@
   )
     (begin
       (try! (require-contract-owner))
-      (try! (validate-non-zero-amount contract-balance))
+      (asserts! (> contract-balance u0) (err ERR-ZERO-AMOUNT-PROVIDED))
       
       (match (as-contract (stx-transfer? contract-balance tx-sender contract-owner))
         success (ok contract-balance)
